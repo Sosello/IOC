@@ -69,6 +69,20 @@ gpio_write (uint32_t pin, uint32_t val)
         gpio_regs_virt->gpclr[reg] = (1 << bit);
 }
 
+static uint32_t
+gpio_read (uint32_t pin)
+{
+    uint32_t reg = pin / 32;
+    uint32_t bit = pin % 32;
+
+    //retourne 262144 quand c'est pas pressé et 0 sinon donc :
+    if ((gpio_regs_virt->gplev[reg] & (0x1 << bit)) == 0)
+        return 1;
+    else
+        return 0;
+}
+
+
 //------------------------------------------------------------------------------
 // Access to memory-mapped I/O
 //------------------------------------------------------------------------------
@@ -126,34 +140,8 @@ delay ( unsigned int milisec )
     nanosleep ( &ts, &dummy );
 }
 
-//Handler pour le thread
-void * blink(void* arg)
+int main(int argc,char ** argv)
 {
-    printf ( "-- info: start blinking.\n" );
-
-    while (1) {
-        gpio_write (*((int *)arg+2) , *((int *)arg+1) );
-        delay ( *((int *)arg) );
-        *((int *)arg+1) = 1 - *((int *)arg+1);
-    }
-}
-
-int
-main ( int argc, char **argv )
-{
-
-    // Get args
-    // ---------------------------------------------
-
-    int period, half_period;
-
-    period = 1000; /* default = 1Hz */
-    if ( argc > 1 ) {
-        period = atoi ( argv[1] );
-    }
-    half_period = period / 2;
-    uint32_t volatile * gpio_base = 0;
-
     // map GPIO registers
     // ---------------------------------------------
 
@@ -162,55 +150,19 @@ main ( int argc, char **argv )
         exit ( 1 );
     }
 
-    // Setup GPIO of LED0 to output
+    // Setup GPIO of BP to INPUT
     // ---------------------------------------------
     
-    gpio_fsel(GPIO_LED0, GPIO_FSEL_OUTPUT);
+    gpio_fsel(GPIO_BP, GPIO_FSEL_INPUT);
 
-    // Setup GPIO of LED1 to output
-    // ---------------------------------------------
-    
-    gpio_fsel(GPIO_LED1, GPIO_FSEL_OUTPUT);
-    
-
-    // Blink led at frequency of 1Hz
-    // ---------------------------------------------
-
-    uint32_t val = 0;
-    
-    //création des deux threads
-
-    //les arguments de chacun des threads
-    void * arg0 = malloc(sizeof(int)*3);
-    void * arg1 = malloc(sizeof(int)*3);
-    //{half_period,begin_value,GPIO_LED}
-    //le 1er
-
-    *((int *)arg0) = half_period;
-    *((int *)arg0+1) = val;
-    *((int *)arg0+2) = GPIO_LED0;
-
-    pthread_t blink0_thread;
-    if(pthread_create (&blink0_thread, NULL, blink, arg0) != 0)
+    uint32_t val;
+    while(1)
     {
-        printf("error in thread 0");
-        exit(1);
-    }
-    //le 2ème
-
-    *((int *)arg1) = half_period;
-    *((int *)arg1+1) = val+1;
-    *((int *)arg1+2) = GPIO_LED1;
-
-    pthread_t blink1_thread;
-    if(pthread_create (&blink1_thread, NULL, blink, arg1) != 0)
-    {
-        printf("error in thread 1");
-        exit(1);
+        val = gpio_read(GPIO_BP);
+        printf("BP at GPIO %d state : %d\n",GPIO_BP,val);
+        delay(500);
     }
 
-    pthread_join(blink0_thread,NULL);
-    pthread_join(blink1_thread,NULL);
 
     return 0;
 }
