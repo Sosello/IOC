@@ -62,6 +62,8 @@ dmesg
 
 insertion du module (l'os va enregistré avec n de major)
 
+Pour récpérer le numéro *major*, *insdev* 
+
 n de major dans /proc/device 
 `cat /proc/devices` = `245 led`
 
@@ -92,6 +94,20 @@ insdev                                                                          
 bash-4.2$ scp -P62223 rmdev pi@peri:dauvet_chen/labdriver
 rmdev                                                                                                                                                                            100%  106    35.3KB/s   00:00    
 bash-4.2$ 
+
+après modif ledbp (driver)
+ echo "10" > /dev/ledbp_dauvet_chen
+pi@raspberrypi ~/dauvet_chen/labdriver $ echo "00" > /dev/ledbp_dauvet_chen
+pi@raspberrypi ~/dauvet_chen/labdriver $ echo "11" > /dev/ledbp_dauvet_chen
+pi@raspberrypi ~/dauvet_chen/labdriver $ echo "11" > /dev/ledbp_dauvet_chen
+
+allume et éteint les leds
+
+
+
+
+
+
 
 
 

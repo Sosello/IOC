@@ -6,7 +6,7 @@ LAB             = labdriver
 MODULE          = ledbp_dauvet_chen
 
 CROSSDIR        = /users/enseig/franck/IOC
-KERNELDIR       = /dsk/l1/misc/linux-rpi-3.18.y2
+KERNELDIR       = /dsk/l1/misc/linux-rpi-3.18.y
 CROSS_COMPILE   = $(CROSSDIR)/arm-bcm2708hardfp-linux-gnueabi/bin/bcm2708hardfp-
         
 obj-m           += $(MODULE).o

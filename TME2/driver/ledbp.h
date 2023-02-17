@@ -1,14 +1,14 @@
 #include <linux/fs.h>
+#include <linux/module.h>
+#include <linux/init.h>
+#include <asm/io.h>
+#include <mach/platform.h>
+
 
 char DRV_NAME[246] = "ledbp_dauvet_chen";
 
 //Gestion GPIO
 //-----------------------------------
-
-
-//Variable globale pour le bouton
-char BP_ON = 0;   // mis à 1 si le bouton a été appuyé, mis à 0 quand la tâche qui attend l'appui a vu l'appui
-char BP_OFF = 0;  // mis à 1 si le bouton a été relâché, mis à 0 quand la tâche qui attend le relâchement a vu le relâchement
 
 
 #define BCM2835_PERIPH_BASE     0x20000000
@@ -20,9 +20,6 @@ char BP_OFF = 0;  // mis à 1 si le bouton a été relâché, mis à 0 quand la 
 
 #define GPIO_FSEL_INPUT  0
 #define GPIO_FSEL_OUTPUT 1
-
-
-static const int LED0 = 4;
 
 struct gpio_s
 {
@@ -41,7 +38,7 @@ struct gpio_s
     uint32_t gppudclk[3];
     uint32_t test[1];
 }
-volatile *gpio_regs = (struct gpio_s *)__io_address(GPIO_BASE);
+volatile *gpio_regs_virt = (struct gpio_s *)__io_address(BCM2835_GPIO_BASE);
 
 
 static void 
@@ -64,83 +61,14 @@ gpio_write (uint32_t pin, uint32_t val)
         gpio_regs_virt->gpclr[reg] = (1 << bit);
 }
 
-static uint32_t
+static char
 gpio_read (uint32_t pin)
 {
     uint32_t reg = pin / 32;
     uint32_t bit = pin % 32;
+    //printk("bp value %d\n",((gpio_regs_virt->gplev[reg] & (0x1 << bit))));
 
-    return (gpio_regs_virt->gplev[reg] & (0x1 << bit));
-}
-
-//------------------------------------------------------------------------------
-// Access to memory-mapped I/O
-//------------------------------------------------------------------------------
-
-#define RPI_PAGE_SIZE           4096
-#define RPI_BLOCK_SIZE          4096
-
-static int mmap_fd;
-
-static int
-gpio_mmap ( void ** ptr )
-{
-    void * mmap_result;
-
-    mmap_fd = open ( DRV_NAME, O_RDWR | O_SYNC );
-
-    if ( mmap_fd < 0 ) {
-        return -1;
-    }
-
-    mmap_result = mmap (
-        NULL
-      , RPI_BLOCK_SIZE
-      , PROT_READ | PROT_WRITE
-      , MAP_SHARED
-      , mmap_fd
-      , BCM2835_GPIO_BASE );
-
-    if ( mmap_result == MAP_FAILED ) {
-        close ( mmap_fd );
-        return -1;
-    }
-
-    *ptr = mmap_result;
-
-    return 0;
-}
-
-void
-gpio_munmap ( void * ptr )
-{
-    munmap ( ptr, RPI_BLOCK_SIZE );
-}
-
-    //détection du bouton pressé
-void * bp_press(void* arg)
-{
-    printf ( "-- info: bp start.\n" );
-
-    uint32_t val_prec = 1;
-    uint32_t val_nouv = 1;
-
-    uint32_t bp_pin = *((uint32_t *)arg);
-
-    while(1)
-    {
-        delay(20);
-        val_nouv = gpio_read(bp_pin);
-
-        if(val_prec != val_nouv)//changement d'état
-        {
-            if(val_nouv == 0)//appuyé
-                BP_ON = 1;
-            else //relaché
-                BP_OFF = 1;
-        }
-        val_prec = val_nouv;
-    }
+    return ((gpio_regs_virt->gplev[reg] & (0x1 << bit)) == 0)?'1':'0';
 }
 
 //Primitive du driver
@@ -149,11 +77,6 @@ void * bp_press(void* arg)
 static int 
 open_led_dauvet_chen(struct inode *inode, struct file *file) {
 
-
-    if ( gpio_mmap ( (void **)&gpio_regs ) < 0 ) {
-        printf ( "-- error: cannot setup mapped GPIO.\n" );
-        exit ( 1 );
-    }
 
     // Setup GPIO of LED0 to output
     // ---------------------------------------------
@@ -170,26 +93,36 @@ open_led_dauvet_chen(struct inode *inode, struct file *file) {
     
     gpio_fsel(GPIO_BP, GPIO_FSEL_INPUT);
     
-    //printk(KERN_DEBUG "open()\n");
+    printk(KERN_DEBUG "open_led_dauvet_chen()\n");
     return 0;
 }
 
 static ssize_t 
 read_led_dauvet_chen(struct file *file, char *buf, size_t count, loff_t *ppos) {
     //printk(KERN_DEBUG "read()\n");
-    return gpio_read(count);
+    //on lis la valeur du bouton poussoir
+    buf[0] = gpio_read(GPIO_BP);
+    buf[1] = '\0';
+    printk("read bp %d : %c\n",GPIO_BP,buf[0]);
+    
+    return 2;
 }
 
 static ssize_t 
 write_led_dauvet_chen(struct file *file, const char *buf, size_t count, loff_t *ppos) {
     //printk(KERN_DEBUG "write()\n");
-    gpio_write(((int)*buf),count);
+    //dans buf 1 er octet LED 2eme octet valeur
+    uint32_t led_no = (buf[0] == '0') ? GPIO_LED0 : GPIO_LED1;
+    uint32_t val = (buf[1] == '1') ? 1 : 0;
+    gpio_write(led_no,val);
+    printk("write led %d : %d\n",led_no,val);
+
     return count;
 }
 
 static int 
 release_led_dauvet_chen(struct inode *inode, struct file *file) {
-    printk(KERN_DEBUG "close()\n");
+    printk(KERN_DEBUG "release_led_dauvet_chen()\n");
     return 0;
 }
 
