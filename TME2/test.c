@@ -22,5 +22,7 @@ int main()
       sleep( 1);
       read( fdbp, bp, 2);
    } while (bp[0] == '0');
+   close(fdled0);
+   close(fdbp);
    return 0;
 }
