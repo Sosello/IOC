@@ -1,27 +1,5 @@
-// --------------------------------------------------------------------------------------------------------------------
-// Multi-tâches cooperatives : solution basique mais efficace :-)
-// --------------------------------------------------------------------------------------------------------------------
-
-// --------------------------------------------------------------------------------------------------------------------
-// unsigned int waitFor(timer, period) 
-// Timer pour taches périodiques 
-// configuration :
-//  - MAX_WAIT_FOR_TIMER : nombre maximum de timers utilisés
-// arguments :
-//  - timer  : numéro de timer entre 0 et MAX_WAIT_FOR_TIMER-1
-//  - period : période souhaitée
-// retour :
-//  - nombre de périodes écoulées depuis le dernier appel
-// --------------------------------------------------------------------------------------------------------------------
-#define MAX_WAIT_FOR_TIMER 2
-unsigned int waitFor(int timer, unsigned long period){
-  static unsigned long waitForTimer[MAX_WAIT_FOR_TIMER];  // il y a autant de timers que de tâches périodiques
-  unsigned long newTime = micros() / period;              // numéro de la période modulo 2^32 
-  int delta = newTime - waitForTimer[timer];              // delta entre la période courante et celle enregistrée
-  if ( delta < 0 ) delta = 1 + newTime;                   // en cas de dépassement du nombre de périodes possibles sur 2^32 
-  if ( delta ) waitForTimer[timer] = newTime;             // enregistrement du nouveau numéro de période
-  return delta;
-}
+#include "timer.h"
+#include "oled.h"
 
 //--------- définition de la tache Led
 
@@ -60,6 +38,7 @@ void setup_Mess( struct Mess_s * ctx, int timer, unsigned long period, const cha
   ctx->period = period;
   strcpy(ctx->mess, mess);
   Serial.begin(9600);                                     // initialisation du débit de la liaison série
+  while(!Serial);
 }
 
 void loop_Mess(struct Mess_s *ctx) {
@@ -71,15 +50,19 @@ void loop_Mess(struct Mess_s *ctx) {
 
 struct Led_s Led1;
 struct Mess_s Mess1;
+struct Oled_s Oled1;
 
 //--------- Setup et Loop
 
 void setup() {
-  setup_Led(&Led1, 0, 100000, LED_BUILTIN);                        // Led est exécutée toutes les 100ms 
-  setup_Mess(&Mess1, 1, 1000000, "bonjour");              // Mess est exécutée toutes les secondes 
+  setup_Led(&Led1, 0, 500000, LED_BUILTIN);                        // Led est exécutée toutes les 100ms 
+  setup_Mess(&Mess1, 1, 5000000, "bonjour");              // Mess est exécutée toutes les secondes 
+  setup_oled(&Oled1, 2, 1000000);
 }
 
 void loop() {
   loop_Led(&Led1);                                        
-  loop_Mess(&Mess1); 
+  loop_Mess(&Mess1);
+  loop_oled(&Oled1); 
 }
+ 

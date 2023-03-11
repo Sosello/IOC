@@ -41,7 +41,7 @@ Nous avons alors créé un simple programme `helloworld` qui affiche simplement 
 
 il a suffit de faire `make` et le programme a été compilé et envoyé à notre raspberry dans notre dossier personnel.
 
-## Manipukation des GPIOs
+## Manipulation des GPIOs
 
 ### Contrôle de GPIO en sortie
 
