@@ -11,7 +11,7 @@
 // retour :
 //  - nombre de périodes écoulées depuis le dernier appel
 // --------------------------------------------------------------------------------------------------------------------
-#define MAX_WAIT_FOR_TIMER 4
+#define MAX_WAIT_FOR_TIMER 10
 unsigned int waitFor(int timer, unsigned long period){
   static unsigned long waitForTimer[MAX_WAIT_FOR_TIMER];  // il y a autant de timers que de tâches périodiques
   unsigned long newTime = micros() / period;              // numéro de la période modulo 2^32 

@@ -71,10 +71,94 @@ La nouvelle tâche affiche et enlève le mot "Test" de l'écran.
 
 ## Communications inter-tâches
 
+On ajoute à notre sketch un fichier header **flag.h** qui contient la structure de donnée pour la mailbox.
+
+la mailbox à un état `state` aussi appelé flag, qui permet de signaler entre plusieurs tâches qu'on a mis à jour `val` : la variable partagé entre plusieurs tâches.
+
 ### Questions
+
+* Dans le texte précédent, quel est le nom de la boîte à lettre et comment est-elle initialisée ?
+  
+    la boite à lettre instancié est `mb`, elle est initialisé vide
+
+On créé alors un header **lum.h** pour la gestion de la tâche de la photo-résistance et on modifie simplement les fonctions `loop_oled()` et `loop_Led()`: on ajoute en argument un pointeur à la structure mailbox et on change le comportement des fonctions pour qu'elles attendent/placent le verrou sur la variable partagée.
+
+```C
+void loop_lum(Lum_s * ctx,mailbox_s * mb_oled ,mailbox_s * mb_led) {
+  if (!waitFor(ctx->timer,ctx->period)) return; // sort si moins d'une periode d'attente
+
+  ctx->val = analogRead(PHOTO_PIN);
+
+  if (mb_oled->state == EMPTY); // attend que la mailbox oled soit vide
+  {
+    mb_oled->val = map(ctx->val,0,PHOTO_MAX,0,100);
+    mb_oled->state = FULL;
+  }
+  if (mb_led->state == EMPTY); // attend que la mailbox led soit vide
+  {
+    mb_led->val = map(ctx->val,0,PHOTO_MAX,1,500000); //inversement proportionnel à la luminosité
+    mb_led->state = FULL;
+  }
+}
+```
+
+```C
+void loop_oled(struct Oled_s * ctx,mailbox_s * mb) {
+  if (!waitFor(ctx->timer,ctx->period)) return;         // sort s'il y a moins d'une'période écoulée
+  if (mb->state != FULL) return;                        // sort si flag pas mis à jour
+
+  display.clearDisplay();
+  display.setCursor(10, 0);
+  display.printf("%d %s\n",mb->val,F("%"));
+  display.display();
+  
+  mb->state = EMPTY;
+}
+```C
+void setup_Led( struct Led_s * ctx, int timer, unsigned long period, byte pin) {
+  while(!Serial);
+  ctx->timer = timer;
+  ctx->period = period;
+  ctx->pin = pin;
+  ctx->etat = 0;
+  pinMode(pin,OUTPUT);
+  digitalWrite(pin, ctx->etat);
+}
+
+void loop_Led( struct Led_s * ctx,mailbox_s * mb) {
+  if (!waitFor(ctx->timer, ctx->period)) return;          // sort s'il y a moins d'une période écoulée
+  
+  digitalWrite(ctx->pin,ctx->etat);                       // ecriture
+  ctx->etat = 1 - ctx->etat;                              // changement d'état
+  // Serial.println(ctx->period);            
+
+  if (mb->state == FULL)                       // pour ne pas être bridé à la periode de la tache lum 
+  {
+      ctx->period = mb->val;                   // changement de la periode
+      mb->state = EMPTY;
+  }
+}
+```
+
+et dans notre programme principale on instancie deux mailbox `mb_photo_oled` et `mb_photo_led`
 
 ## Gestions des interruptions
 
+Il existe un autre moyen pour lever des signaux sur Arduino, c'est les routines d'interruption.
+
 ### Questions
 
+Le comportement souhaité était le suivant :
+On position un handler d'interruption sur le pin d'interruption.
+On à une tâche isr qui regarde constament l'état du port série, si le caractère lu est "s", on écrit sur le pin d'interruption la valeur LOW qui déclenche alors le handler, ce signal déclenche une interruption qui stopera la Led qui clignotte.
+
+Le comportement observé  est que le pin 2 est en fait relié à la LED intégré, donc le handler se déclenche à chaque clignottement, pour le pin 3 ca ne marche pas.
+
+En revanche l'interruption du clignottement fonctionne comme prévu.
+
+![Graphe de notre machine à état](./led_interrupt/graphviz.svg)
+
 ## Tout ensemble
+
+buzzer.h avec pwm
+bouton bp

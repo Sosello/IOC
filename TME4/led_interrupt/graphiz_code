@@ -1,0 +1,68 @@
+digraph G {
+
+  subgraph cluster_0 {
+    style=filled;
+    color=lightgrey;
+    node [style=filled,color=white];
+    setup_led ;
+    loop_led -> loop_led;
+    label = "Led1";
+  }
+
+  subgraph cluster_1 {
+    style=filled;
+    color=lightgrey;
+    node [style=filled,color=white];
+    setup_mess ;
+    loop_mess -> loop_mess;
+    label = "Mess1";
+  }
+  
+  subgraph cluster_2 {
+    style=filled;
+    color=lightgrey;
+    node [style=filled,color=white];
+    setup_oled ;
+    loop_oled-> loop_oled;
+    label = "Oled1";
+  }
+  
+  subgraph cluster_3 {
+    style=filled;
+    color=lightgrey;
+    node [style=filled,color=white];
+    setup_lum ;
+    loop_lum -> loop_lum;
+    label = "Lum1";
+  }
+  
+  subgraph cluster_4 {
+    style=filled;
+    color=lightgrey;
+    node [style=filled,color=white];
+    setup_isr;
+    loop_isr -> loop_isr;
+    label = "Isr1";
+  }
+  
+  node [shape=box]; mb_photo_oled; mb_photo_led; mb_isr_led;
+  
+  node [shape=circle]
+  setup -> setup_mess;
+  setup -> setup_oled;
+  setup -> setup_lum;
+  setup -> setup_led;
+  setup -> setup_isr;
+  
+  setup -> loop;
+  
+  loop -> loop_mess;
+  loop -> loop_oled;
+  loop -> loop_lum;
+  loop -> loop_led;
+  loop -> loop_isr;
+  
+  loop_lum -> mb_photo_oled -> loop_oled;
+  loop_lum -> mb_photo_led -> loop_led;
+  loop_isr -> mb_isr_led -> loop_led;
+}

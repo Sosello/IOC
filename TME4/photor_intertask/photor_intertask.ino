@@ -2,6 +2,7 @@
 #include "flag.h"
 #include "oled.h"
 #include "lum.h"
+#include "isr.h"
 
 //--------- définition de la tache Led
 
@@ -22,17 +23,24 @@ void setup_Led( struct Led_s * ctx, int timer, unsigned long period, byte pin) {
   digitalWrite(pin, ctx->etat);
 }
 
-void loop_Led( struct Led_s * ctx,mailbox_s * mb) {
+void loop_Led( struct Led_s * ctx,mailbox_s * mb_photo,mailbox_s * mb_isr) {
   if (!waitFor(ctx->timer, ctx->period)) return;          // sort s'il y a moins d'une période écoulée
   
+  if(mb_isr->state == FULL)
+  {
+    ctx->etat = 0;
+    digitalWrite(ctx->pin,ctx->etat);
+    return;
+  }                           //si interruption la led ne clignotte plus
+
   digitalWrite(ctx->pin,ctx->etat);                       // ecriture
   ctx->etat = 1 - ctx->etat;                              // changement d'état
   // Serial.println(ctx->period);            
 
-  if (mb->state == FULL)                       // pour ne pas être bridé à la periode de la tache lum 
+  if (mb_photo->state == FULL)                       // pour ne pas être bridé à la periode de la tache lum 
   {
-      ctx->period = mb->val;                   // changement de la periode
-      mb->state = EMPTY;
+      ctx->period = mb_photo->val;                   // changement de la periode
+      mb_photo->state = EMPTY;
   }
 }
 
@@ -63,11 +71,13 @@ struct Led_s Led1;
 struct Mess_s Mess1;
 struct Oled_s Oled1;
 struct Lum_s Lum1;
+struct Isr_s Isr1;
 
 //---------- Déclaration des mailboxs
 
 struct mailbox_s mb_photo_oled = {.state = EMPTY};
 struct mailbox_s mb_photo_led = {.state = EMPTY};
+struct mailbox_s mb_isr_led = {.state = EMPTY,.val = 0};
 
 //--------- Setup et Loop
 
@@ -76,12 +86,14 @@ void setup() {
   setup_Mess(&Mess1, 1, 5000000, "bonjour");              // Mess est exécutée toutes les secondes 
   setup_oled(&Oled1, 2, 500000);
   setup_lum(&Lum1,3,500000);
+  setup_isr(&Isr1, 4, 500000);
 }
 
 void loop() {
-  loop_Led(&Led1,&mb_photo_led);                                      
+  loop_Led(&Led1,&mb_photo_led,&mb_isr_led);                                      
   loop_Mess(&Mess1);
   loop_oled(&Oled1,&mb_photo_oled); 
   loop_lum(&Lum1,&mb_photo_oled,&mb_photo_led);
+  loop_isr(&Isr1,&mb_isr_led);
 }
  
