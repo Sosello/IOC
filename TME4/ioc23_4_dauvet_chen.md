@@ -160,5 +160,164 @@ En revanche l'interruption du clignottement fonctionne comme prévu.
 
 ## Tout ensemble
 
-buzzer.h avec pwm
-bouton bp
+Il est maintenant simple de faire fonctionner plusieurs tâche qui contrôle plusieurs périphérique en même temp, tout en les faisant intéragir entre eux : Le sketch finale que nous proposons est une photo résistance faisant clignotté une led, en affichant la quantité de lumière reçu sur l'écran, en fonction de cette valeur un buzzeur joue un arpège, la vitesse de cette arpège dépend alors de la quantité de lumière, il est possible d'interrompre le clignottement de la led (définitivement) par la lecture de la lettre "s" sur la console, ou de suspendre le buzzer en appuyant sur un bouton poussoir.
+
+### Le buzzer
+
+Pour faire fonctionner le buzzer passif, le plus simple est d'utiliser la fonctionnalité PWM de l'arduino. L'ESP32 (contrairement à un arduino uno) dispose d'un vrai dispositf PWM et peut donc émettre des signaux analogique très précisément, il dispose donc d'une bibliothèque de fonction très complète.
+
+`ledcAttachPin(pin,channel)` : il existe 16 canals PWM dans l'ESP32, ces canal sont par où passent le signal analogique, on peut l'attacher a un pin, presque tous les pins peuvent être utilisé.
+
+`ledcWriteNote(channel,note,octave)` : cette fonction est la manière la plus simple de jouer une fréquence sur le buzzer, elle s'occupe de choisir en fonction de `note` et `octave` une fréquence pour le signal PWM, une résolution et choisi un duty tel que le rapport de la durée entre le signal bas et haut est égal à 1.
+
+il suffit alors de créé une tâche buzzer qui contient la note actuellement joué ainsi que l'octave. Il existe une mailbox qui connecte la valeur de la photo-résistance à la periode de cette tâche. Le tout est codé dans un header buzzer.h
+
+```C
+#include "esp32-hal-ledc.h"
+#include "timer.h"
+#include "flag.h"
+
+#define PWM_CHANNEL 0
+#define PWM_PIN 17
+#define MIN_OCTAVE 3
+#define MAX_OCTAVE 5
+
+//--------- définition de la tache Oled
+
+struct Buzzer_s {
+  int timer;                                              // numéro du timer pour cette tâche utilisé par WaitFor
+  unsigned long period;                                   // periode de clignotement
+  note_t current_note    ;                                    // note courrante
+  int current_octave ;                                     //octave courante
+}; 
+
+void setup_buzzer(Buzzer_s * ctx,int timer,int period)
+{
+  while(!Serial);
+  ctx->timer = timer;
+  ctx->period = period;
+  ctx->current_note = NOTE_C;
+  ctx->current_octave = MIN_OCTAVE;
+
+  //configuration de la broche PWM pour le buzzer, on associe le channel au pin
+  ledcAttachPin(PWM_PIN, PWM_CHANNEL);
+}
+
+void loop_buzzer(Buzzer_s * ctx,mailbox_s * mb)
+{
+  if (!waitFor(ctx->timer,ctx->period)) return; // sort si moins d'une periode d'attente
+  Serial.printf("note %d %d\n",int( ctx->current_note),ctx->current_octave);
+  ledcWriteNote(PWM_CHANNEL, ctx->current_note, ctx->current_octave);//on joue la note via PWM
+
+  if((ctx->current_note = note_t(int(ctx->current_note) + 1)) == NOTE_MAX)//on incrémente la note joué à chaque periode
+  {
+    ctx->current_note = NOTE_C;
+    if(ctx->current_octave++ > MAX_OCTAVE)
+      ctx->current_octave = MIN_OCTAVE;
+  }
+  //mailbox de la photo-résistance qui controle la vitesse du LFO (periode) 
+  if (mb->state == FULL); // attend que la mailbox led soit vide
+  {
+    ctx->period = mb->val; // changement de la periode
+    mb->state = EMPTY;
+  }
+}
+```
+
+On aurait aussi pu utiliser `digitalRight(pin,val)` (en ayant préalablement initialiser le pin à utiliser avec `pinMode(pin,OUTPUT)`) periodiquement avec la periode du timer pour générer une fréquence. 
+
+### Le bouton
+
+Pour le boutton on créé un header **button.h** qui a une tâche pour la gestion du boutton, êtant donné que sur le circuit on a pas de *résistance de pull-up* on peut dire à l'ESP32 d'en générer une. le bouton gère le rebond et écrit dans une mailbox deux bits différent, un si le bouton 'arduino détecte un appuie et un autre si l'arduino détecte un relachement.
+
+```C
+#include "esp32-hal-gpio.h"
+#include "timer.h"
+#include "flag.h"
+
+#define BP_PIN 23
+
+struct Button_s {
+  int timer;                                              // numéro du timer pour cette tâche utilisé par WaitFor
+  unsigned long period;                                   // periode de clignotement
+  int val_prec;                                             // etats interne du bouton
+  int val_nouv;
+}; 
+
+void setup_button(Button_s * ctx,int timer,int period)
+{
+  while(!Serial);
+  ctx->timer = timer;
+  ctx->period = period;
+  ctx->val_prec = 1;
+  ctx->val_nouv = 1;
+
+  //initialisation du bouton en mode pullup
+  pinMode(BP_PIN, INPUT_PULLUP);
+}
+
+void loop_button(Button_s * ctx,mailbox_s * mb)
+{
+  if (!waitFor(ctx->timer,ctx->period)) return; // sort si moins d'une periode d'attente
+  ctx->val_nouv = digitalRead(BP_PIN);
+  // Serial.println(BP_PIN);
+  if((ctx->val_prec != ctx->val_nouv) && mb->state == EMPTY)
+  {
+    if(ctx->val_nouv == 0)//appuyé
+      mb->val |= 0x1;
+    else //relaché
+      mb->val |= 0x10;
+    
+    mb->state == FULL;
+  }
+  ctx->val_prec = ctx->val_nouv;
+}
+```
+
+On ajoute dans `loop_buzzer()` une mailbox est  quelques fonctionnalités pour stopper l'arpégiateur du buzzer :
+
+```C
+void loop_buzzer(Buzzer_s * ctx,mailbox_s * mb_photo,mailbox_s * mb_button)
+{
+  if (!waitFor(ctx->timer,ctx->period)) return; // sort si moins d'une periode d'attente
+  // Serial.printf("note %d %d\n",int( ctx->current_note),ctx->current_octave);
+
+  if (mb_button->state == FULL); // attend que la mailbox button soit vide pour gestion de l'appuie
+  {
+    if((mb_button->val & 0x10) == 0x10)//si on détecte un relachement
+    {
+      mb_button->val ^= 0x10;
+      //sauvegarde des registres
+      note_t note = ctx->current_note;
+      int octave = ctx->current_octave;
+      bool state = ctx->state;
+      setup_buzzer(ctx, ctx->timer, ctx->period); //raz du buzzer inversion de l'état
+      ctx->state =  !state;
+      ctx->current_note = note;  // on souhaite garder la note actuelle
+      ctx->current_octave = octave;
+    }
+    mb_photo->state = EMPTY;
+  }
+
+  if(ctx->state == false)  //on désolidarise le canal PWM du pin et on quitte s'il est éteint
+  {
+    ledcDetachPin(PWM_PIN);
+    return;    
+  }
+
+  ledcWriteNote(PWM_CHANNEL, ctx->current_note, ctx->current_octave);//on joue la note via PWM
+
+  if((ctx->current_note = note_t(int(ctx->current_note) + 1)) == NOTE_MAX)//on incrémente la note joué à chaque periode
+  {
+    ctx->current_note = NOTE_C;
+    if(ctx->current_octave++ > MAX_OCTAVE)
+      ctx->current_octave = MIN_OCTAVE;
+  }
+  //mailbox de la photo-résistance qui controle la vitesse du LFO (periode) 
+  if (mb_photo->state == FULL); // attend que la mailbox led soit vide
+  {
+    ctx->period = mb_photo->val; // changement de la periode
+    mb_photo->state = EMPTY;
+  }
+}
+```

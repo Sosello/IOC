@@ -3,7 +3,8 @@
 #include "oled.h"
 #include "lum.h"
 #include "isr.h"
-// #include "buzzer.h"
+#include "buzzer.h"
+#include "button.h"
 
 //--------- définition de la tache Led
 
@@ -73,14 +74,16 @@ struct Mess_s Mess1;
 struct Oled_s Oled1;
 struct Lum_s Lum1;
 struct Isr_s Isr1;
-// struct Buzzer_s Buzz1;
-// struct Buzzer_s Buzz2;
+struct Buzzer_s Buzz1;
+struct Button_s Button1;
 
 //---------- Déclaration des mailboxs
 
 struct mailbox_s mb_photo_oled = {.state = EMPTY};
 struct mailbox_s mb_photo_led = {.state = EMPTY};
 struct mailbox_s mb_isr_led = {.state = EMPTY,.val = 0};
+struct mailbox_s mb_photo_buzz = {.state = EMPTY};
+struct mailbox_s mb_button_buzz = {.state = EMPTY,.val = 0};
 
 //--------- Setup et Loop
 
@@ -90,17 +93,17 @@ void setup() {
   setup_oled(&Oled1, 2, 500000);
   setup_lum(&Lum1,3,500000);
   setup_isr(&Isr1, 4, 500000);
-  // setup_buzzer(&Buzz1, 5, 100000);
-  // setup_buzzer(&Buzz2, 5, 120000);
+  setup_buzzer(&Buzz1, 5, 100000);
+  setup_button(&Button1,6,20000);
 }
 
 void loop() {
   loop_Led(&Led1,&mb_photo_led,&mb_isr_led);                                      
   loop_Mess(&Mess1);
   loop_oled(&Oled1,&mb_photo_oled); 
-  loop_lum(&Lum1,&mb_photo_oled,&mb_photo_led);
+  loop_lum(&Lum1,&mb_photo_oled,&mb_photo_led,&mb_photo_buzz);
   loop_isr(&Isr1,&mb_isr_led);
-  // loop_buzzer(&Buzz1);
-  // loop_buzzer(&Buzz2);
+  loop_buzzer(&Buzz1,&mb_photo_buzz,&mb_button_buzz);
+  loop_button(&Button1,&mb_button_buzz);
 }
  
